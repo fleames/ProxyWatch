@@ -33,7 +33,9 @@ class SplashScreen(Screen):
     """Splash screen displayed while the dashboard initializes."""
 
     BINDINGS = [
-        ("escape", "app.pop_screen", "Skip"),
+        ("escape", "dismiss", "Skip"),
+        ("q", "app.quit", "Quit"),
+        ("ctrl+c", "app.quit", "Quit"),
     ]
 
     def compose(self) -> ComposeResult:
@@ -44,9 +46,9 @@ class SplashScreen(Screen):
 
     def on_mount(self) -> None:
         # Auto-dismiss after 2 seconds
-        self.set_timer(2, self.dismiss_splash)
+        self.set_timer(2, self.action_dismiss)
 
-    def dismiss_splash(self) -> None:
+    def action_dismiss(self) -> None:
         """Pop the splash screen and show the dashboard."""
         try:
             self.app.pop_screen()

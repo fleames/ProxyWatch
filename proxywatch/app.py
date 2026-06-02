@@ -133,6 +133,7 @@ class ProxyWatchApp(App):
     """
 
     BINDINGS = [
+        ("ctrl+c", "quit", "Quit"),
         ("q", "quit", "Quit"),
         ("r", "refresh", "Refresh"),
         ("l", "clear_logs", "Clear Logs"),
