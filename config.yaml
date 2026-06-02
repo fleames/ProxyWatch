@@ -1,0 +1,48 @@
+# ProxyWatch Configuration
+# =========================
+
+# Trusted client IPs — only these IPs are considered "trusted"
+# Unknown IPs triggering alerts will appear in the Security panel
+trusted_clients:
+  - 192.168.1.100
+  - 10.0.0.50
+
+# Docker container name for the SOCKS5 proxy
+proxy_container: socks5
+
+# Port the SOCKS5 proxy listens on
+proxy_port: 1081
+
+# Dashboard refresh interval in seconds
+refresh_rate: 1
+
+# Network interface to monitor for bandwidth statistics
+network_interface: eth0
+
+# Number of log lines to keep in the proxy logs panel
+log_lines: 50
+
+# Rolling history duration in seconds for the network graph
+graph_history_seconds: 300
+
+# Alert thresholds
+alert_thresholds:
+  # Trigger warning when total bandwidth exceeds this Mbps
+  bandwidth_mbps: 100
+
+  # Trigger warning when connections increase by this many in one tick
+  connections_per_minute: 50
+
+  # Alert on connections from untrusted IPs
+  unknown_client_alert: true
+
+  # Alert when proxy container stops/restarts
+  container_restart_alert: true
+
+  # Alert when proxy port is no longer listening
+  port_down_alert: true
+
+# Metric export paths
+export:
+  json_path: /tmp/proxywatch_metrics.json
+  csv_path: /tmp/proxywatch_metrics.csv
