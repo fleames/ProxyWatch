@@ -66,14 +66,15 @@ A production-quality terminal dashboard for monitoring a SOCKS5 proxy (Docker co
 git clone <repo-url> /opt/proxywatch
 cd /opt/proxywatch
 
-# Install Python dependencies
-pip install -r requirements.txt
+# Create venv and install dependencies
+python3 -m venv venv
+venv/bin/pip install -r requirements.txt
 
 # Edit configuration
 nano config.yaml
 
-# Run
-python main.py
+# Run (activates venv automatically)
+./run.sh
 ```
 
 ### Option 2: Docker
