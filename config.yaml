@@ -1,5 +1,21 @@
-# ProxyWatch Configuration
-# =========================
+# ProxyWatch v2.0 Configuration
+# ===============================
+
+# ---------------------------------------------------------------------------
+# Remote VPS Connection (for Windows/macOS monitoring a Linux VPS via SSH)
+# ---------------------------------------------------------------------------
+# Set host to connect to your VPS. ProxyWatch will auto-detect remote mode
+# and collect all metrics over SSH instead of reading local /proc files.
+remote:
+  host: ""                 # Your VPS IP or hostname (e.g. "123.45.67.89")
+  port: 22                 # SSH port
+  user: "root"             # SSH username
+  key_path: ""             # Path to private SSH key (e.g. "~/.ssh/id_rsa")
+  # password: ""           # Alternatively, use password auth
+
+# ---------------------------------------------------------------------------
+# SOCKS5 Proxy Configuration
+# ---------------------------------------------------------------------------
 
 # Trusted client IPs — only these IPs are considered "trusted"
 # Unknown IPs triggering alerts will appear in the Security panel
@@ -25,7 +41,16 @@ log_lines: 50
 # Rolling history duration in seconds for the network graph
 graph_history_seconds: 300
 
-# Alert thresholds
+# ---------------------------------------------------------------------------
+# Docker Containers to Monitor
+# ---------------------------------------------------------------------------
+docker_containers:
+  - socks5
+  - wg-easy
+
+# ---------------------------------------------------------------------------
+# Alert Thresholds
+# ---------------------------------------------------------------------------
 alert_thresholds:
   # Trigger warning when total bandwidth exceeds this Mbps
   bandwidth_mbps: 100
@@ -42,7 +67,17 @@ alert_thresholds:
   # Alert when proxy port is no longer listening
   port_down_alert: true
 
-# Metric export paths
+# ---------------------------------------------------------------------------
+# Metric Export Paths
+# ---------------------------------------------------------------------------
 export:
   json_path: /tmp/proxywatch_metrics.json
   csv_path: /tmp/proxywatch_metrics.csv
+
+# ---------------------------------------------------------------------------
+# SSH Terminal Settings
+# ---------------------------------------------------------------------------
+terminal:
+  enabled: true
+  history_size: 2000
+  font_size: "medium"

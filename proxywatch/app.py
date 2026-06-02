@@ -1,4 +1,4 @@
-"""Main ProxyWatch Textual application — dashboard layout, hotkeys, and lifecycle."""
+"""Main ProxyWatch Textual application — dashboard layout, hotkeys, SSH terminal, lifecycle."""
 
 from __future__ import annotations
 
@@ -19,9 +19,10 @@ from proxywatch.collectors.proxy_stats import ProxyStatsCollector
 from proxywatch.collectors.destinations import DestinationsCollector
 from proxywatch.collectors.proxy_logs import ProxyLogsCollector
 from proxywatch.collectors.security import SecurityCollector
-from proxywatch.config import load_config, validate_config
+from proxywatch.config import load_config, validate_config, is_remote_mode
 from proxywatch.exporters.json_exporter import export_json
 from proxywatch.exporters.csv_exporter import export_csv
+from proxywatch.remote import RemoteClient
 from proxywatch.splash import SplashScreen
 from proxywatch.widgets.header import DashboardHeader
 from proxywatch.widgets.proxy_status import ProxyStatusPanel
@@ -32,10 +33,11 @@ from proxywatch.widgets.network_graph import NetworkGraphPanel
 from proxywatch.widgets.trusted_clients import TrustedClientsPanel
 from proxywatch.widgets.docker_health import DockerHealthPanel
 from proxywatch.widgets.security_alerts import SecurityAlertsPanel
+from proxywatch.widgets.ssh_terminal import SSHTerminalPanel
 
 
 class ProxyWatchApp(App):
-    """Main dashboard application."""
+    """Main dashboard application — local or remote VPS monitoring + SSH terminal."""
 
     CSS = """
     Screen {
@@ -91,6 +93,36 @@ class ProxyWatchApp(App):
         height: auto;
     }
 
+    #ssh-terminal-container {
+        height: 20;
+        overflow-y: scroll;
+    }
+
+    #ssh-terminal-output {
+        height: 16;
+        overflow-y: scroll;
+        background: #000011;
+        border: solid #004400;
+    }
+
+    #ssh-terminal-input-row {
+        layout: horizontal;
+        height: 3;
+        background: #000011;
+    }
+
+    #ssh-prompt {
+        width: auto;
+        padding: 0 1;
+        content-align: left middle;
+    }
+
+    #ssh-terminal-input {
+        width: 1fr;
+        background: #000011;
+        border: none;
+    }
+
     .panel {
         border: solid #3333aa;
         background: #0d0d2d;
@@ -140,6 +172,7 @@ class ProxyWatchApp(App):
         ("d", "toggle_docker", "Docker Panel"),
         ("n", "toggle_network", "Network Graph"),
         ("s", "toggle_security", "Security Panel"),
+        ("t", "toggle_terminal", "SSH Terminal"),
         ("ctrl+e", "export_metrics", "Export Metrics"),
     ]
 
@@ -148,20 +181,44 @@ class ProxyWatchApp(App):
         self.config_path = config_path
         self.config: dict[str, Any] = {}
         self.data_store = DataStore()
+        self._remote_client: RemoteClient | None = None
         self._collectors: list[Any] = []
         self._docker_visible = True
         self._network_visible = True
         self._security_visible = True
+        self._terminal_visible = False
         self._log_collector: ProxyLogsCollector | None = None
+        self._is_remote = False
 
     def on_mount(self) -> None:
-        """Setup config, collectors, and show splash."""
+        """Setup config, collectors, SSH connection, and show splash."""
         # Load config
         self.config = load_config(self.config_path)
         validate_config(self.config)
+        self._is_remote = is_remote_mode(self.config)
 
         # Show splash screen
         self.push_screen(SplashScreen())
+
+        # Start connection and collectors after a brief delay
+        self.set_timer(0.3, self._startup)
+
+    async def _startup(self) -> None:
+        """Async startup: connect SSH if needed, then start collectors."""
+        if self._is_remote:
+            remote_cfg = self.config.get("remote", {})
+            self._remote_client = RemoteClient(remote_cfg)
+
+            # Try connecting
+            connected = await self._remote_client.connect()
+            if connected:
+                self.notify(f"Connected to {remote_cfg['host']}", title="SSH Connected")
+            else:
+                self.notify(
+                    f"SSH connection failed: {self._remote_client.last_error}",
+                    title="Connection Error",
+                    severity="error",
+                )
 
         # Start collectors and timed tasks
         self.set_timer(0.5, self._start_collectors)
@@ -177,28 +234,25 @@ class ProxyWatchApp(App):
         graph_secs = self.config.get("graph_history_seconds", 300)
         log_lines = self.config.get("log_lines", 50)
         alert_cfg = self.config.get("alert_thresholds", {})
+        docker_containers = self.config.get("docker_containers", ["socks5", "wg-easy"])
 
         # System
-        sys_col = SystemCollector(self.data_store, interval)
+        sys_col = SystemCollector(self.data_store, interval, self._remote_client)
         await sys_col.start()
         self._collectors.append(sys_col)
 
-        # Docker (socks5 + wg-easy)
-        docker_col = DockerCollector(
-            self.data_store,
-            [proxy_container, "wg-easy"],
-            interval,
-        )
+        # Docker
+        docker_col = DockerCollector(self.data_store, docker_containers, interval, self._remote_client)
         await docker_col.start()
         self._collectors.append(docker_col)
 
         # Connections
-        conn_col = ConnectionCollector(self.data_store, proxy_port, interval)
+        conn_col = ConnectionCollector(self.data_store, proxy_port, interval, self._remote_client)
         await conn_col.start()
         self._collectors.append(conn_col)
 
         # Bandwidth
-        bw_col = BandwidthCollector(self.data_store, net_iface, interval, graph_secs)
+        bw_col = BandwidthCollector(self.data_store, net_iface, interval, graph_secs, self._remote_client)
         await bw_col.start()
         self._collectors.append(bw_col)
 
@@ -214,7 +268,7 @@ class ProxyWatchApp(App):
 
         # Logs
         self._log_collector = ProxyLogsCollector(
-            self.data_store, proxy_container, log_lines, interval
+            self.data_store, proxy_container, log_lines, interval, self._remote_client
         )
         await self._log_collector.start()
         self._collectors.append(self._log_collector)
@@ -243,7 +297,7 @@ class ProxyWatchApp(App):
     def compose(self) -> ComposeResult:
         """Build the dashboard layout."""
         # Header
-        yield DashboardHeader(self.data_store)
+        yield DashboardHeader(self.data_store, self._remote_client)
 
         # Top row: Proxy Status | Live Connections | Top Destinations
         with Container(id="top-row"):
@@ -276,6 +330,14 @@ class ProxyWatchApp(App):
             with Container(classes="panel", id="security-panel"):
                 yield SecurityAlertsPanel(self.data_store)
 
+        # SSH Terminal (hidden by default)
+        with Container(classes="panel", id="ssh-terminal-panel"):
+            yield SSHTerminalPanel(self._remote_client)
+
+        # Initially hide terminal
+        terminal_panel = self.query_one("#ssh-terminal-panel", Container)
+        terminal_panel.display = "none"
+
         # Footer with hotkeys
         yield Footer()
 
@@ -295,20 +357,42 @@ class ProxyWatchApp(App):
     def action_toggle_docker(self) -> None:
         """Toggle Docker health panel visibility."""
         self._docker_visible = not self._docker_visible
-        panel = self.query_one("#docker-panel", Container)
-        panel.display = "block" if self._docker_visible else "none"
+        try:
+            panel = self.query_one("#docker-panel", Container)
+            panel.display = "block" if self._docker_visible else "none"
+        except Exception:
+            pass
 
     def action_toggle_network(self) -> None:
         """Toggle network graph panel visibility."""
         self._network_visible = not self._network_visible
-        panel = self.query_one("#network-panel", Container)
-        panel.display = "block" if self._network_visible else "none"
+        try:
+            panel = self.query_one("#network-panel", Container)
+            panel.display = "block" if self._network_visible else "none"
+        except Exception:
+            pass
 
     def action_toggle_security(self) -> None:
         """Toggle security alerts panel visibility."""
         self._security_visible = not self._security_visible
-        panel = self.query_one("#security-panel", Container)
-        panel.display = "block" if self._security_visible else "none"
+        try:
+            panel = self.query_one("#security-panel", Container)
+            panel.display = "block" if self._security_visible else "none"
+        except Exception:
+            pass
+
+    def action_toggle_terminal(self) -> None:
+        """Toggle SSH terminal panel visibility."""
+        self._terminal_visible = not self._terminal_visible
+        try:
+            panel = self.query_one("#ssh-terminal-panel", Container)
+            panel.display = "block" if self._terminal_visible else "none"
+
+            if self._terminal_visible:
+                terminal = self.query_one(SSHTerminalPanel)
+                terminal.refresh_connection()
+        except Exception:
+            pass
 
     def action_export_metrics(self) -> None:
         """Perform immediate metrics export."""
@@ -328,9 +412,15 @@ class ProxyWatchApp(App):
             pass
 
     async def on_unmount(self) -> None:
-        """Stop all collectors on exit."""
+        """Stop all collectors and disconnect SSH on exit."""
         for collector in self._collectors:
             try:
                 await collector.stop()
+            except Exception:
+                pass
+
+        if self._remote_client:
+            try:
+                await self._remote_client.disconnect()
             except Exception:
                 pass

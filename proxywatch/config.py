@@ -1,4 +1,4 @@
-"""Configuration loader with YAML parsing and validation."""
+"""Configuration loader with YAML parsing and validation — supports remote VPS mode."""
 
 from __future__ import annotations
 
@@ -30,6 +30,21 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "network_interface": "eth0",
     "log_lines": 50,
     "graph_history_seconds": 300,
+    # Remote VPS connection (optional — if set, runs in remote mode)
+    "remote": {
+        "host": "",
+        "port": 22,
+        "user": "root",
+        "key_path": "",
+        "password": "",
+    },
+    # SSH terminal / full VPS manager features
+    "terminal": {
+        "enabled": True,
+        "history_size": 2000,
+        "font_size": "medium",
+    },
+    "docker_containers": ["socks5", "wg-easy"],
 }
 
 CONFIG_SEARCH_PATHS = [
@@ -98,3 +113,19 @@ def validate_config(config: dict[str, Any]) -> None:
         raise ValueError("refresh_rate must be a float >= 0.1 seconds.")
     if not isinstance(config.get("log_lines"), int) or config["log_lines"] < 1:
         raise ValueError("log_lines must be a positive integer.")
+
+    # Validate remote config if host is set
+    remote = config.get("remote", {})
+    if remote.get("host"):
+        if not isinstance(remote.get("port"), int) or not (1 <= remote["port"] <= 65535):
+            raise ValueError("remote.port must be an integer between 1 and 65535.")
+        if not remote.get("user"):
+            raise ValueError("remote.user must be set when remote.host is specified.")
+        if not remote.get("key_path") and not remote.get("password"):
+            raise ValueError("remote.key_path or remote.password must be set.")
+
+
+def is_remote_mode(config: dict[str, Any]) -> bool:
+    """Return True if the config specifies a remote VPS connection."""
+    remote = config.get("remote", {})
+    return bool(remote.get("host"))

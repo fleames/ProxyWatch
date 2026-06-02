@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""ProxyWatch — Real-Time SOCKS5 Proxy Monitoring Dashboard.
+"""ProxyWatch — Real-Time SOCKS5 Proxy Monitoring Dashboard + VPS Manager.
 
 Usage:
     python main.py
     python main.py --config /path/to/config.yaml
 
-Requirements:
-    Python 3.12+, Linux
+Runs on:
+    - Linux (local mode: reads /proc, /sys, Docker SDK directly)
+    - Windows/macOS (remote mode: connects to Linux VPS via SSH)
 """
 
 from __future__ import annotations
@@ -18,12 +19,12 @@ import sys
 def main() -> None:
     """Entry point for ProxyWatch dashboard."""
     parser = argparse.ArgumentParser(
-        description="ProxyWatch — Real-Time SOCKS5 Proxy Monitoring Dashboard",
+        description="ProxyWatch — Real-Time SOCKS5 Proxy Monitoring Dashboard + VPS Manager",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   python main.py
-  python main.py --config /etc/proxywatch/config.yaml
+  python main.py --config config.yaml
 
 Hotkeys:
   Q              Quit
@@ -32,6 +33,7 @@ Hotkeys:
   D              Toggle Docker panel
   N              Toggle Network graph
   S              Toggle Security panel
+  T              Toggle SSH Terminal (full VPS control)
   Ctrl+E         Export metrics
         """,
     )
@@ -46,20 +48,13 @@ Hotkeys:
         "--version",
         "-v",
         action="version",
-        version="ProxyWatch v1.0.0",
+        version="ProxyWatch v2.0.0",
     )
 
     args = parser.parse_args()
 
-    # Verify we're on Linux
-    if sys.platform != "linux":
-        print(
-            "[!] ProxyWatch requires Linux. "
-            "It reads /proc/net/tcp, /sys/class/net/*, and uses Docker SDK.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
+    # Show platform warning if on Linux without remote config
+    # but don't block execution — remote mode works everywhere
     from proxywatch.app import ProxyWatchApp
 
     app = ProxyWatchApp(config_path=args.config)

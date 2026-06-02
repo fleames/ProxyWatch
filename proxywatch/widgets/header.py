@@ -1,9 +1,9 @@
-"""Top header bar displaying hostname, time, uptime, CPU, RAM, Disk."""
+"""Top header bar displaying hostname, time, uptime, CPU, RAM, Disk + SSH status."""
 
 from __future__ import annotations
 
 import time
-from collections import deque
+from typing import TYPE_CHECKING
 
 from textual.app import ComposeResult
 from textual.widgets import Header, Static
@@ -13,16 +13,20 @@ from proxywatch.utils.formatting import (
     fmt_uptime,
 )
 
+if TYPE_CHECKING:
+    from proxywatch.remote import RemoteClient
+
 
 class DashboardHeader(Static):
     """Custom header bar that auto-refreshes from the data store.
 
-    Displays: HOSTNAME | TIME | UPTIME | CPU% | RAM% | DISK%
+    Displays: HOSTNAME | TIME | UPTIME | CPU% | RAM% | DISK% [SSH STATUS]
     """
 
-    def __init__(self, data_store) -> None:
+    def __init__(self, data_store, remote_client: "RemoteClient | None" = None) -> None:
         super().__init__("")
         self.data_store = data_store
+        self._remote = remote_client
 
     def on_mount(self) -> None:
         self.set_interval(1, self.update_header)
@@ -41,6 +45,14 @@ class DashboardHeader(Static):
         disk_str = fmt_percentage(disk)
         uptime_str = fmt_uptime(uptime)
 
+        # SSH status indicator
+        ssh_status = ""
+        if self._remote is not None:
+            if self._remote.connected:
+                ssh_status = f" │ [bold green]⚡ SSH: {self._remote.host}[/bold green]"
+            else:
+                ssh_status = f" │ [bold red]✗ SSH: {self._remote.host} (disconnected)[/bold red]"
+
         self.update(
             f" [bold cyan]{hostname}[/bold cyan] │ "
             f"[white]{sys_time}[/white] │ "
@@ -48,4 +60,5 @@ class DashboardHeader(Static):
             f"[yellow]CPU {cpu_str}[/yellow] │ "
             f"[magenta]RAM {ram_str}[/magenta] │ "
             f"[blue]DISK {disk_str}[/blue]"
+            f"{ssh_status}"
         )

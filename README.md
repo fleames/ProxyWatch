@@ -1,72 +1,85 @@
-# ProxyWatch
+# ProxyWatch v2.0
 
-**Real-Time SOCKS5 Proxy Monitoring Dashboard**
+**Real-Time SOCKS5 Proxy Monitoring Dashboard + VPS Manager**
 
-A production-quality terminal dashboard for monitoring a SOCKS5 proxy (Docker container) on Linux VPS. Provides live metrics, connections, bandwidth, logs, security alerts, and more — all in a beautiful htop/btop-style TUI.
+A production-quality terminal dashboard for monitoring a SOCKS5 proxy (Docker container) on a Linux VPS. Provides live metrics, connections, bandwidth, logs, security alerts, an SSH terminal for full VPS control — all in a beautiful htop/btop-style TUI.
+
+## New in v2.0
+
+- **Cross-Platform**: Runs on Windows, macOS, and Linux
+- **Remote Mode**: Connects to any Linux VPS via SSH — monitors proxy + full VPS management
+- **Built-in SSH Terminal**: Press `T` to open a full interactive terminal on your VPS
+- **Auto-detection**: Local mode (Linux, reads /proc directly) or remote mode (SSH) — just configure it
 
 ![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)
-![Platform](https://img.shields.io/badge/Platform-Linux-black.svg)
+![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-black.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 
 ---
 
 ## Features
 
-- **8 Real-Time Panels**: Proxy status, live connections, top destinations, proxy logs, network graph, trusted client stats, Docker health, security alerts
-- **Non-blocking Architecture**: Fully async collectors using asyncio, zero subprocess calls for network data
-- **Textual TUI**: Rich, responsive terminal UI with dark theme, syntax-highlighted logs, DataTables, ASCII bar graphs
-- **Security Monitor**: Alerts for unknown IPs, bandwidth spikes, connection surges, container restarts, port down events
-- **Metrics Export**: Auto-export to JSON and CSV every tick
-- **Docker-Aware**: Monitors socks5 and wg-easy containers via Docker SDK
-- **Performance**: <100 MB RAM, <2% CPU on modern VPS
+### Dashboard (8 Real-Time Panels)
+- **Proxy Status**: Online/offline, active connections, requests/min, uptime
+- **Live Connections**: Source IP → Destination with duration
+- **Top Destinations**: IP / connections / bandwidth ranked
+- **Proxy Logs**: Color-coded log stream (INFO=green, WARN=yellow, ERR=red)
+- **Network Graph**: ASCII bandwidth history graph (RX/TX)
+- **Trusted Clients**: Per-client connection counts and traffic
+- **Docker Health**: Container status, CPU%, memory, network I/O
+- **Security Alerts**: Unknown IPs, bandwidth spikes, connection surges, container restart detection
 
----
+### SSH Terminal (VPS Manager)
+- Full interactive command shell on your VPS
+- Execute any Linux command: `docker`, `systemctl`, `htop`, `df`, `ss`, `nethogs`, etc.
+- Built-in `help`, `clear`, `history` commands
+- Command output displayed inline with rich formatting
 
-## Screenshots
+### Cross-Platform Architecture
+- **Local Mode (Linux)**: Reads `/proc/net/tcp`, `/sys/class/net/*`, Docker SDK directly
+- **Remote Mode (Windows/macOS)**: All data collected over SSH from the VPS
+- **No subprocess calls** — all parsing uses stable APIs
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│  vps-01 │ 2026-06-02 21:30:00 │ UP 14d 3h │ CPU 2.3% │ ...  │
-├──────────────────────┬───────────────────────┬───────────────┤
-│  SOCKS5 STATUS       │  LIVE CONNECTIONS     │  TOP DEST     │
-│  Status: ONLINE      │  IP -> Dest:Port      │  IP / C / BW  │
-│  Active: 14          │  2.110...→198.54:443  │  198.54...    │
-│  Req/min: 203        │  89.167...→184.86:80  │  184.86...    │
-├──────────────────────┴───────────────────────┴───────────────┤
-│  PROXY LOGS                                                   │
-│  [INFO] Connection from allowed IP address                    │
-│  [ERR] splice: connection timed out                           │
-├──────────────────────┬───────────────────────┬───────────────┤
-│  NETWORK GRAPH       │  TRUSTED CLIENTS      │  DOCKER HLTH  │
-│  ↓ 12.3 Mbps ████    │  IP / Conns / RX / TX │  socks5 ONL   │
-│  ↑ 4.1 Mbps  ██      │  2.110... 1054 18 GB  │  wg-easy HLTH │
-├──────────────────────┴───────────────────────┴───────────────┤
-│  SECURITY ALERTS: ✓ No alerts                                │
-└──────────────────────────────────────────────────────────────┘
-```
+### Metrics Export
+- Auto-export to JSON and CSV every refresh tick
+- Manual export via `Ctrl+E`
 
 ---
 
 ## Requirements
 
-- **Linux** (Ubuntu 24.04+ recommended)
 - **Python 3.12+**
-- **Docker Engine** (with `/var/run/docker.sock` accessible)
-- **SOCKS5 Docker container** named `socks5` (configurable)
+- **For remote mode**: SSH access to a Linux VPS
+- **For local mode**: Linux with Docker Engine
+- **VPS side**: Docker containers (`socks5`, `wg-easy`)
 - **Terminal** with 256-color and Unicode support
 
 ---
 
 ## Installation
 
-### Option 1: Direct (Recommended for VPS)
+### Windows
+
+```batch
+git clone https://github.com/fleames/ProxyWatch.git
+cd ProxyWatch
+
+python -m venv venv
+venv\Scripts\pip install -r requirements.txt
+
+# Edit config.yaml — set your VPS IP under remote:
+notepad config.yaml
+
+# Run
+run.bat
+```
+
+### Linux / macOS
 
 ```bash
-# Clone or copy files to your server
-git clone <repo-url> /opt/proxywatch
+git clone https://github.com/fleames/ProxyWatch.git /opt/proxywatch
 cd /opt/proxywatch
 
-# Create venv and install dependencies
 python3 -m venv venv
 venv/bin/pip install -r requirements.txt
 
@@ -77,29 +90,6 @@ nano config.yaml
 ./run.sh
 ```
 
-### Option 2: Docker
-
-```bash
-# Build and run (requires host pid/network + docker.sock)
-docker build -t proxywatch .
-docker run -it --rm \
-    --pid=host \
-    --net=host \
-    -v /var/run/docker.sock:/var/run/docker.sock:ro \
-    -v $(pwd)/config.yaml:/app/config.yaml:ro \
-    proxywatch
-```
-
-### Option 3: Docker Compose
-
-```bash
-# Start the full stack (socks5 + wg-easy + proxywatch)
-docker compose --profile monitoring up -d
-
-# Attach to the dashboard
-docker attach proxywatch
-```
-
 ---
 
 ## Configuration
@@ -107,30 +97,33 @@ docker attach proxywatch
 Edit `config.yaml`:
 
 ```yaml
-# Trusted client IPs (unknown IPs trigger security alerts)
+# === REMOTE MODE (Windows/macOS → VPS) ===
+remote:
+  host: "123.45.67.89"     # Your VPS IP
+  port: 22
+  user: "root"
+  key_path: "~/.ssh/id_rsa"  # SSH key path
+  # password: ""             # Or use password
+
+# === SOCKS5 PROXY ===
+proxy_container: socks5
+proxy_port: 1081
 trusted_clients:
   - 192.168.1.100
   - 10.0.0.50
 
-# Docker container name for the SOCKS5 proxy
-proxy_container: socks5
+# === MONITORING ===
+refresh_rate: 1              # seconds between updates
+network_interface: eth0      # bandwidth monitoring interface
+log_lines: 50                # log buffer size
+graph_history_seconds: 300   # network graph history
 
-# Port the SOCKS5 proxy listens on
-proxy_port: 1081
+# === DOCKER CONTAINERS ===
+docker_containers:
+  - socks5
+  - wg-easy
 
-# Refresh interval (seconds)
-refresh_rate: 1
-
-# Network interface for bandwidth monitoring
-network_interface: eth0
-
-# Log buffer size
-log_lines: 50
-
-# Rolling graph history (seconds)
-graph_history_seconds: 300
-
-# Alert thresholds
+# === ALERTS ===
 alert_thresholds:
   bandwidth_mbps: 100
   connections_per_minute: 50
@@ -138,18 +131,11 @@ alert_thresholds:
   container_restart_alert: true
   port_down_alert: true
 
-# Export paths
+# === EXPORT ===
 export:
   json_path: /tmp/proxywatch_metrics.json
   csv_path: /tmp/proxywatch_metrics.csv
 ```
-
-Configuration is loaded from (in priority order):
-1. `--config` CLI argument
-2. `PROXYWATCH_CONFIG` environment variable
-3. `./config.yaml`
-4. `~/.config/proxywatch/config.yaml`
-5. `/etc/proxywatch/config.yaml`
 
 ---
 
@@ -157,12 +143,13 @@ Configuration is loaded from (in priority order):
 
 | Key | Action |
 |-----|--------|
-| `Q` | Quit |
+| `Q` / `Ctrl+C` | Quit |
 | `R` | Refresh |
 | `L` | Clear proxy logs |
 | `D` | Toggle Docker health panel |
 | `N` | Toggle Network graph panel |
 | `S` | Toggle Security alerts panel |
+| **`T`** | **Toggle SSH Terminal (full VPS control)** |
 | `Ctrl+E` | Export metrics to JSON/CSV |
 
 ---
@@ -170,102 +157,93 @@ Configuration is loaded from (in priority order):
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────┐
-│                    MAIN ASYNC LOOP                    │
-│                                                      │
-│  SystemCollector ──┐                                 │
-│  DockerCollector ──┤                                 │
-│  ConnectionCollector ──┤                             │
-│  BandwidthCollector ──┤──> DataStore <── Widgets     │
-│  ProxyStatsCollector ──┤    (dict)      (Textual)    │
-│  DestinationsCollector ──┤                           │
-│  ProxyLogsCollector ──┤                              │
-│  SecurityCollector ──┘                               │
-│                                                      │
-│  Exporters (JSON/CSV) ──> /tmp/proxywatch_*.json     │
-└──────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│                    ProxyWatch TUI (Textual)              │
+│                                                         │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐              │
+│  │  Proxy   │  │  Live    │  │   Top    │              │
+│  │  Status  │  │  Conns   │  │  Dests   │              │
+│  └──────────┘  └──────────┘  └──────────┘              │
+│  ┌─────────────────────────────────────────┐           │
+│  │           Proxy Logs                     │           │
+│  └─────────────────────────────────────────┘           │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐              │
+│  │ Network  │  │ Trusted  │  │ Docker   │              │
+│  │  Graph   │  │ Clients  │  │  Health  │              │
+│  └──────────┘  └──────────┘  └──────────┘              │
+│  ┌─────────────────────────────────────────┐           │
+│  │         Security Alerts                  │           │
+│  └─────────────────────────────────────────┘           │
+│  ┌─────────────────────────────────────────┐           │
+│  │  ⚡ SSH TERMINAL (full VPS control)      │  Press T  │
+│  │  root@vps:~$ _                           │           │
+│  └─────────────────────────────────────────┘           │
+│                                                         │
+│         LOCAL MODE            REMOTE MODE               │
+│     (Linux /proc, /sys)    (SSH → Linux VPS)            │
+│     ┌──────────────┐      ┌──────────────┐              │
+│     │  psutil      │      │  asyncssh    │              │
+│     │  docker SDK  │      │  ssh run cmd │              │
+│     │  /proc/net   │      │  cat /proc   │              │
+│     └──────────────┘      └──────────────┘              │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ### Data Sources
 
-| Metric | Source |
-|--------|--------|
-| CPU / RAM / Disk | `psutil` library |
-| Docker container stats | `docker` Python SDK |
-| Active TCP connections | `/proc/net/tcp`, `/proc/net/tcp6` |
-| Bandwidth (bytes/sec) | `/sys/class/net/<iface>/statistics/` |
-| Container logs | Docker SDK log stream |
-| Container uptime | Docker SDK container inspect |
-
-**No subprocess calls to `ss`, `netstat`, or `docker` CLI** — all parsing uses stable procfs reads and official Python APIs.
+| Metric | Local Mode | Remote Mode |
+|--------|-----------|-------------|
+| CPU / RAM / Disk | `psutil` | `top`, `free`, `df` via SSH |
+| Docker stats | Docker SDK | `docker stats --no-stream` via SSH |
+| TCP connections | `/proc/net/tcp` | `cat /proc/net/tcp` via SSH |
+| Bandwidth | `/sys/class/net/` | `cat /sys/class/net/` via SSH |
+| Container logs | Docker SDK | `docker logs --tail N` via SSH |
 
 ---
 
-## Project Structure
+## SSH Terminal Commands
 
+The built-in SSH terminal (`T` key) supports all VPS commands:
+
+```bash
+# Docker management
+docker ps
+docker stats --no-stream
+docker logs socks5
+docker restart socks5
+
+# System monitoring
+htop
+df -h
+free -h
+uptime
+ss -tnp
+nethogs eth0
+
+# Service management
+systemctl status docker
+journalctl -f
 ```
-proxywatch/
-├── main.py                          # Entry point
-├── config.yaml                      # User configuration
-├── requirements.txt                 # Python dependencies
-├── Dockerfile                       # Container build
-├── docker-compose.yml               # Full stack
-├── README.md                        # This file
-│
-└── proxywatch/
-    ├── __init__.py
-    ├── app.py                       # Textual App (layout, hotkeys)
-    ├── splash.py                    # Splash screen
-    ├── config.py                    # YAML config loader
-    ├── collectors/
-    │   ├── base.py                  # DataStore + BaseCollector
-    │   ├── system.py                # CPU/RAM/Disk/Uptime
-    │   ├── docker_collector.py      # Container health
-    │   ├── connections.py           # /proc/net/tcp parser
-    │   ├── bandwidth.py             # RX/TX rates + history
-    │   ├── proxy_stats.py           # Aggregate stats
-    │   ├── destinations.py          # Top dest IPs
-    │   ├── proxy_logs.py            # Docker log stream
-    │   └── security.py             # Alert detection
-    ├── widgets/
-    │   ├── header.py                # Top bar
-    │   ├── proxy_status.py          # Panel 1
-    │   ├── client_connections.py    # Panel 2
-    │   ├── top_destinations.py      # Panel 3
-    │   ├── proxy_logs.py            # Panel 4
-    │   ├── network_graph.py         # Panel 5
-    │   ├── trusted_clients.py       # Panel 6
-    │   ├── docker_health.py         # Panel 7
-    │   └── security_alerts.py       # Panel 8
-    ├── exporters/
-    │   ├── json_exporter.py
-    │   └── csv_exporter.py
-    └── utils/
-        ├── net_parser.py            # /proc parsers
-        └── formatting.py            # Human-readable formatters
-```
+
+Built-in terminal commands: `help`, `clear`, `history`, `exit`
 
 ---
 
 ## Performance
 
-Designed to run efficiently on modest VPS resources:
-
 - **RAM**: <100 MB RSS (Python + Textual + collectors)
-- **CPU**: <2% on a single vCPU (mostly I/O wait on procfs)
-- **Disk I/O**: Minimal — reads `/proc` and `/sys` virtual filesystems
-- **Network**: No external API calls; local Docker socket only
-
-All collectors are cooperative async coroutines. No threads are spawned except for Docker SDK calls which use `asyncio.to_thread()`.
+- **CPU**: <2% on a single vCPU
+- **SSH overhead**: ~50ms per command batch (commands run in parallel)
+- **All collectors are cooperative async coroutines** — no thread spawning except for SSH reconnect
 
 ---
 
 ## Security Notes
 
-- ProxyWatch requires access to `/var/run/docker.sock` — this grants **full Docker control**. Run with caution.
-- The security monitor detects unknown IPs by comparing against `trusted_clients` in config.yaml.
+- SSH keys should use `~/.ssh/id_rsa` or specify a custom path
+- Password auth is supported but not recommended for production
+- SSH host key checking is disabled for convenience — enable it by removing `known_hosts=None` in `remote.py`
 - All data stays on the local machine. No telemetry, no phoning home.
-- Consider running behind `tmux` or `screen` for persistent sessions.
 
 ---
 
@@ -273,25 +251,19 @@ All collectors are cooperative async coroutines. No threads are spawned except f
 
 | Issue | Solution |
 |-------|----------|
-| `ModuleNotFoundError: textual` | `pip install -r requirements.txt` |
-| `Permission denied: /proc/net/tcp` | Run as root or with `CAP_NET_ADMIN` |
-| `Docker connection refused` | Ensure `/var/run/docker.sock` is mounted |
-| `No containers found` | Verify `proxy_container` name in config.yaml |
-| `Bandwidth shows 0` | Check `network_interface` matches your interface (`ip a`) |
-| `Logs not streaming` | Ensure the `socks5` container exists and is running |
+| `ModuleNotFoundError: asyncssh` | `pip install -r requirements.txt` |
+| `SSH connection failed` | Verify `remote.host` and credentials in config.yaml |
+| `Permission denied` | Check SSH key path or password |
+| `docker: command not found` | Ensure Docker is installed on the VPS |
+| `Bandwidth shows 0` | Check `network_interface` matches VPS interface (`ip a`) |
+| Terminal not responding | Press `Ctrl+C` or `Q` to quit |
 
 ---
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) for details.
+MIT License
 
 ---
 
-## Support
-
-For issues, feature requests, or contributions, open an issue on the repository.
-
----
-
-**ProxyWatch** — Know your proxy. Monitor everything.
+**ProxyWatch v2.0** — Know your proxy. Control your VPS. All in one terminal.

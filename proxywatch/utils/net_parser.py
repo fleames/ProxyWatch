@@ -1,4 +1,8 @@
-"""Safe, subprocess-free parsers for Linux /proc/net files."""
+"""Safe, subprocess-free parsers for Linux network data — local and remote modes.
+
+In local mode: reads /proc/net/* and /sys/class/net/* files directly.
+In remote mode: parses command output strings from SSH remote execution.
+"""
 
 from __future__ import annotations
 
@@ -6,7 +10,6 @@ import socket
 import struct
 from ipaddress import IPv4Address, IPv6Address, ip_address
 from typing import Optional
-
 
 # ---------------------------------------------------------------------------
 # /proc/net/tcp  and  /proc/net/tcp6  parsers
@@ -25,10 +28,7 @@ def hex_to_ipv4(hex_str: str) -> str:
 def hex_to_ipv6(hex_str: str) -> str:
     """Convert a /proc/net IPv6 hex address (32 hex digits) to colon-hex notation."""
     try:
-        # /proc/net/tcp6 uses 4 groups of 8 hex chars.  We need ::-notation.
         raw = bytes.fromhex(hex_str)
-        # The representation in /proc is big-endian dwords; IPv6Address needs
-        # 16-byte big-endian sequence.
         return str(IPv6Address(raw))
     except (ValueError, struct.error):
         return "::"
@@ -132,7 +132,7 @@ def is_established(st: int) -> bool:
 # /proc/net/dev  parser
 # ---------------------------------------------------------------------------
 
-_INTERFACE_LINE_THRESHOLD = 4  # lines with fewer than this many columns are headers
+_INTERFACE_LINE_THRESHOLD = 4
 
 
 def parse_proc_net_dev_line(line: str) -> Optional[dict[str, object]]:
@@ -180,6 +180,11 @@ def parse_proc_net_dev_line(line: str) -> Optional[dict[str, object]]:
         "tx_carrier": stats[14],
         "tx_compressed": stats[15],
     }
+
+
+# ---------------------------------------------------------------------------
+# Local /proc file readers (fallback for non-remote mode)
+# ---------------------------------------------------------------------------
 
 
 def read_proc_net_tcp() -> list[dict[str, object]]:
@@ -230,6 +235,63 @@ def read_proc_net_dev() -> list[dict[str, object]]:
     return entries
 
 
+def read_iface_bytes(iface: str) -> tuple[int, int]:
+    """Read current RX and TX byte counters for a network interface.
+
+    Returns (rx_bytes, tx_bytes) from /sys/class/net/<iface>/statistics/.
+    """
+    base = f"/sys/class/net/{iface}/statistics"
+    try:
+        with open(f"{base}/rx_bytes", "r") as fh:
+            rx = int(fh.read().strip())
+    except (FileNotFoundError, PermissionError, ValueError):
+        rx = 0
+    try:
+        with open(f"{base}/tx_bytes", "r") as fh:
+            tx = int(fh.read().strip())
+    except (FileNotFoundError, PermissionError, ValueError):
+        tx = 0
+    return rx, tx
+
+
+# ---------------------------------------------------------------------------
+# Parsers from raw text (for remote SSH output)
+# ---------------------------------------------------------------------------
+
+
+def parse_proc_output(text: str, ipv6: bool = False) -> list[dict[str, object]]:
+    """Parse raw /proc/net/tcp text output into socket entries."""
+    entries: list[dict[str, object]] = []
+    for line in text.splitlines():
+        entry = parse_proc_net_socket_line(line, ipv6=ipv6)
+        if entry is not None:
+            entries.append(entry)
+    return entries
+
+
+def parse_proc_net_dev_output(text: str) -> list[dict[str, object]]:
+    """Parse raw /proc/net/dev text output into interface stats."""
+    entries: list[dict[str, object]] = []
+    for line in text.splitlines():
+        entry = parse_proc_net_dev_line(line)
+        if entry is not None:
+            entries.append(entry)
+    return entries
+
+
+def parse_interface_bytes(rx_text: str, tx_text: str) -> tuple[int, int]:
+    """Parse raw rx_bytes and tx_bytes from command output."""
+    try:
+        rx = int(rx_text.strip())
+    except (ValueError, TypeError):
+        rx = 0
+    try:
+        tx = int(tx_text.strip())
+    except (ValueError, TypeError):
+        tx = 0
+    return rx, tx
+
+
 def get_connection_summary(
     port: int,
 ) -> tuple[int, int, list[dict[str, object]]]:
@@ -257,25 +319,34 @@ def get_connection_summary(
     return established, listening, conns
 
 
-# ---------------------------------------------------------------------------
-# /sys/class/net  byte counters
-# ---------------------------------------------------------------------------
+def get_connection_summary_from_text(
+    tcp_text: str, tcp6_text: str, port: int
+) -> tuple[int, int, list[dict[str, object]]]:
+    """Parse remote /proc/net/tcp + tcp6 output and summarize connections for a port."""
+    established = 0
+    listening = 0
+    conns: list[dict[str, object]] = []
+
+    all_entries = parse_proc_output(tcp_text, ipv6=False) + parse_proc_output(tcp6_text, ipv6=True)
+
+    for entry in all_entries:
+        local_port = int(entry["local_port"])  # type: ignore[arg-type]
+        st = int(entry["st"])  # type: ignore[arg-type]
+
+        if local_port != port:
+            continue
+
+        if st == 0x0A:
+            listening += 1
+        elif st == 0x01:
+            established += 1
+            conns.append(entry)
+
+    return established, listening, conns
 
 
-def read_iface_bytes(iface: str) -> tuple[int, int]:
-    """Read current RX and TX byte counters for a network interface.
-
-    Returns (rx_bytes, tx_bytes) from /sys/class/net/<iface>/statistics/.
-    """
-    base = f"/sys/class/net/{iface}/statistics"
-    try:
-        with open(f"{base}/rx_bytes", "r") as fh:
-            rx = int(fh.read().strip())
-    except (FileNotFoundError, PermissionError, ValueError):
-        rx = 0
-    try:
-        with open(f"{base}/tx_bytes", "r") as fh:
-            tx = int(fh.read().strip())
-    except (FileNotFoundError, PermissionError, ValueError):
-        tx = 0
-    return rx, tx
+def get_connection_summary_remote(
+    tcp_text: str, tcp6_text: str, port: int
+) -> tuple[int, int, list[dict[str, object]]]:
+    """Alias for get_connection_summary_from_text."""
+    return get_connection_summary_from_text(tcp_text, tcp6_text, port)
