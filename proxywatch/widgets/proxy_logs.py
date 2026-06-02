@@ -5,7 +5,6 @@ from __future__ import annotations
 from textual.app import ComposeResult
 from textual.containers import Container
 from textual.widgets import Static, RichLog
-from textual.rich import RichLog as RichLogWidget
 
 
 class ProxyLogsPanel(Container):
